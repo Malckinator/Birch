@@ -1,24 +1,27 @@
 #ifndef TOKEN_H
 #define TOKEN_H
 
+#include <stdlib.h>
 #include <stdbool.h>
+#include "position.h"
 
-typedef struct TokenS
-{
-    enum {
-        TT_Id,
-        TT_Equals,
-        TT_String,
-        TT_Semi,
-        TT_LParen,
-        TT_RParen
-    } type;
+char* TT_EOF;
+char* TT_INT;
+char* TT_FLOAT;
+char* TT_PLUS;
+char* TT_MIN;
+char* TT_MUL;
+char* TT_DIV;
 
+typedef struct TokenStruct {
+    char* type;
     char* value;
-} TokenT;
+    Position* startPosition;
+    Position* endPosition;
+} Token;
 
-TokenT* initToken(int type, char* value);
+Token* initToken(char* type, char* value, Position* startPosition, Position* endPosition);
 
-bool match(TokenT* token, int type, char* value);
+bool tokenMatch(Token* token, char* type, char* value);
 
 #endif

@@ -1,142 +1,140 @@
+#include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <ctype.h>
+#include "../include/error.h"
+#include "../include/utill.h"
 #include "../include/lexer.h"
 
-LexerT* initLexer(char* source) {
-    LexerT* lexer = calloc(1, sizeof(struct LexerS));
+LexerResult* initLexerResult(Token* token, Error* error) {
+    LexerResult* lexerResult = calloc(1, sizeof(struct LexerResultStruct));
+
+    lexerResult->token = token;
+    lexerResult->error = error;
+
+    return lexerResult;
+}
+
+Lexer* initLexer(char* source) {
+    Lexer* lexer = calloc(1, sizeof(struct LexerStruct));
 
     lexer->source = source;
-    lexer->i = -1;
     lexer->c = ' ';
+    lexer->position = initPosition();
 
     lexerAdvance(lexer);
 
     return lexer;
 }
 
-void lexerAdvance(LexerT* lexer) {
-    lexer->i++;
+void lexerAdvance(Lexer* lexer) {
+    positionAdvance(lexer->position, lexer->c);
 
-    if (lexer->i < strlen(lexer->source)) {
-        lexer->c = lexer->source[lexer->i];
-    } else {
-        lexer->c = '\0';
-    }
+    lexer->c = lexer->source[lexer->position->index];
 }
 
-void lexerSkip(LexerT* lexer) {
-    while (lexer->c == ' ' || lexer->c == '\t' || lexer->c == '\n')
-    {
-       lexerAdvance(lexer);
-    }
-}
+Token* addToken(Token* array, int* size, Token* token) {
+    Token* new = calloc(*size + 1, sizeof(struct TokenStruct));
 
-TokenT* lexerNextToken(LexerT* lexer) {
-    while (lexer->c != '\0' && lexer->i < strlen(lexer->source)) {
-        lexerSkip(lexer);
-
-        if (isalnum(lexer->c)) {
-            return lexerCollectId(lexer);
-        }
-
-        if (lexer->c == '"') {
-            return lexerCollectString(lexer);
-        }
-
-        TokenT* token;
-
-        switch (lexer->c) {
-            case '=':
-                token = initToken(TT_Equals, lexerCharToString(lexer));
-                lexerAdvance(lexer);
-                break;
-            case ';':
-                token = initToken(TT_Semi, lexerCharToString(lexer));
-                lexerAdvance(lexer);
-                break;
-            case '(':
-                token = initToken(TT_LParen, lexerCharToString(lexer));
-                lexerAdvance(lexer);
-                break;
-            case ')':
-                token = initToken(TT_RParen, lexerCharToString(lexer));
-                lexerAdvance(lexer);
-                break;
-        }
-
-        return token;
+    for (int i = 0; i < *size; i++) {
+        new[i] = array[i];
     }
 
-    return (void*)0;
+    new[*size] = *token;
+    *size += 1;
+    return new;
 }
 
-TokenT* lexerAdvanceToken(LexerT* lexer, TokenT* token) {
-    lexerAdvance(lexer);
-
-    return token;
-}
-
-TokenT* lexerCollectString(LexerT* lexer) { // Todo add errors, add support for '
-    lexerAdvance(lexer);
-    bool backslash = false;
-    bool finished = false; //////////////////////////////////////////////////////////////////////////////
-    char* value = calloc(1, sizeof(char));
-
-    value[0] = '\0';
+Error* lexerMakeTokens(Lexer* lexer) {
+    Token* tokens = calloc(0, sizeof(struct TokenStruct));
+    int size = 0;
 
     while (lexer->c != '\0') {
-        if (lexer->c == '\\' && !backslash) {
-            backslash = true;
-            continue;
-        } else if (backslash) {
-            if (backslash) {
-                if (lexer->c == 'n') {
-                    lexer->c = '\n';
-                } else if (lexer->c == 't') {
-                    lexer->c = '\t';
-                } //////////////////////////////////////////////////////////////////////////////////////
+        if (charInString(lexer->c, "0123456789.")) {
+            LexerResult* result = lexerMakeNumber(lexer);
+            
+            if (result->error != NULL) {
+                return result->error;
             }
-        } else if (lexer->c == '"') {
-            finished = true;
 
-            lexerAdvance(lexer);
+            Token* token = result->token;
 
+            tokens = addToken(tokens, &size, token);
+            continue;
+        } else if (lexer->c == '+') {
+            Token* token = initToken(TT_PLUS, "+", positionCopy(lexer->position), positionCopy(lexer->position));
+            
+            tokens = addToken(tokens, &size, token);
+        } else if (lexer->c == '-') {
+            Token* token = initToken(TT_MIN, "-", positionCopy(lexer->position), positionCopy(lexer->position));
+
+            tokens = addToken(tokens, &size, token);
+        } else if (lexer->c == '*') {
+            Token* token = initToken(TT_MUL, "*", positionCopy(lexer->position), positionCopy(lexer->position));
+
+            tokens = addToken(tokens, &size, token);
+        } else if (lexer->c == '/') {
+            Token* token = initToken(TT_DIV, "/", positionCopy(lexer->position), positionCopy(lexer->position));
+
+            tokens = addToken(tokens, &size, token);
+        } else if (lexer->c != ' ' && lexer->c != '\t' && lexer->c != '\n') {
+            char* format = calloc(25, sizeof(char));
+            
+            sprintf(format, "Unexpected character '%c'.", lexer->c);
+
+            return initError("IllegalCharacterError", format, getLines(lexer->source)[lexer->position->line - 1], positionCopy(lexer->position), positionCopy(lexer->position));
+        }
+        
+        lexerAdvance(lexer);
+    }
+
+    tokens = addToken(tokens, &size, initToken(TT_EOF, TT_EOF, positionCopy(lexer->position), positionCopy(lexer->position)));
+
+    lexer->tokens = tokens;
+    lexer->tokensSize = size;
+    return NULL;
+}
+
+LexerResult* lexerMakeNumber(Lexer* lexer) {
+    char* number = calloc(1, sizeof(char));
+    number[0] = '\0';
+    int numberSize = 1;
+    Position* startPosition = positionCopy(lexer->position);
+    bool dot = false;
+
+    while (lexer->c != '\0') {
+        if (charInString(lexer->c, "0123456789")) {
+            number = realloc(number, (numberSize + 1) * sizeof(char));
+            
+            number = concat(number, charToString(lexer->c));
+
+            numberSize++;
+        } else if (lexer->c == '.') {
+            if (dot) {
+                Error* error = initError("NumberFormatError", "Too many decimal points.", getLines(lexer->source)[startPosition->line - 1], startPosition, positionCopy(lexer->position));
+
+                return initLexerResult(NULL, error);
+            } else {
+                number = realloc(number, (numberSize + 1) * sizeof(char));
+                
+                number = concat(number, charToString(lexer->c));
+
+                numberSize++;
+
+                dot = true;
+            }
+        } else {
             break;
         }
-
-        char* s = lexerCharToString(lexer);
-        value = realloc(value, (strlen(value) + strlen(s) + 1) * sizeof(char));
-        strcat(value, s);
-
+        
         lexerAdvance(lexer);
     }
+    
+    if (dot) {
+        Token* token = initToken(TT_FLOAT, number, startPosition, positionCopy(lexer->position));
 
-    return initToken(TT_String, value);
-}
-
-TokenT* lexerCollectId(LexerT* lexer) {
-    char* value = calloc(1, sizeof(char));
-
-    value[0] = '\0';
-
-    while (isalnum(lexer->c)) {
-        char* s = lexerCharToString(lexer);
-        value = realloc(value, (strlen(value) + strlen(s) + 1) * sizeof(char));
-        strcat(value, s);
-
-        lexerAdvance(lexer);
+        return initLexerResult(token, NULL);
+    } else {
+        Token* token = initToken(TT_INT, number, startPosition, positionCopy(lexer->position));
+        
+        return initLexerResult(token, NULL);
     }
-
-    return initToken(TT_Id, value);
-}
-
-char* lexerCharToString(LexerT* lexer) {
-    char* str = calloc(2, sizeof(char));
-
-    str[0] = lexer->c;
-    str[1] = '\0';
-
-    return str;
 }

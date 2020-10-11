@@ -2,25 +2,42 @@
 #define LEXER_H
 
 #include "token.h"
+#include "error.h"
 
-typedef struct LexerS {
+typedef struct LexerStruct {
+    Token* tokens;
+    int tokensSize;
+    Position* position;
     char* source;
     char c;
-    unsigned int i;
-} LexerT;
+} Lexer;
 
-LexerT* initLexer(char* source);
+typedef struct LexerResultStruct {
+    Token* token;
+    Error* error;
+} LexerResult;
 
-void lexerAdvance(LexerT* lexer);
+LexerResult* initLexerResult(Token* token, Error* error);
 
-void lexerSkip(LexerT* lexer);
+Lexer* initLexer(char* source);
 
-TokenT* lexerNextToken(LexerT* lexer);
+void lexerAdvance(Lexer* lexer);
 
-TokenT* lexerCollectString(LexerT* lexer);
+Token* addToken(Token* array, int* size, Token* token);
 
-TokenT* lexerCollectId(LexerT* lexer);
+Error* lexerMakeTokens(Lexer* lexer);
 
-char* lexerCharToString(LexerT* lexer);
+LexerResult* lexerMakeNumber(Lexer* lexer);
 
 #endif
+
+/*
+void push(int *arr, int index, int value, int *size, int *capacity){
+    if(*size > *capacity){
+        realloc(arr, sizeof(arr) * 2);
+        *capacity = sizeof(arr) * 2;
+    }
+    arr[index] = value;
+    *size = *size + 1;
+}
+*/

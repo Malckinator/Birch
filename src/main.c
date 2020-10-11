@@ -1,13 +1,22 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include "../include/lexer.h"
+#include "../include/error.h"
 
-int main(int argc, char* argv) {
-    LexerT* lexer = initLexer("var name=\"mal\";print(name);");
+int main() {
+    char* source = "100 + 10;";
+    Lexer* lexer = initLexer(source);
+    Error* error = lexerMakeTokens(lexer);
     
-    TokenT* token = (void*)0;
+    if (error != NULL) {
+        errorDisplay(error);
 
-    while ((token = lexerNextToken(lexer)) != (void*)0) {
-        printf("Token(Type='%d', Value='%s')\n", token->type, token->value);
+        return 0;
+    }
+
+    for (int i = 0; i < lexer->tokensSize; i++) {
+        Token* token = &lexer->tokens[i];
+        printf("Token('%s', '%s')\n", token->type, token->value);
     }
 
     return 0;
